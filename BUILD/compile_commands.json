@@ -1,0 +1,12 @@
+[
+{
+  "directory": "/home/laamiy/Desktop/SPP_CMP/BUILD",
+  "command": "/usr/bin/c++  -I/home/laamiy/Desktop/SPP_CMP/include -I/home/laamiy/GENIE/Generator_DCC/src -I/home/laamiy/GENIE/Comparisons-master/src -I/home/laamiy/HEP/root_6_28/ROOT6Build/include -I/home/laamiy/HEP/Log4cpp/log4cpp/include -I/usr/include/libxml2  -o CMakeFiles/Single_pion_production_cmp.dir/src/single_pion_main.cpp.o -c /home/laamiy/Desktop/SPP_CMP/src/single_pion_main.cpp",
+  "file": "/home/laamiy/Desktop/SPP_CMP/src/single_pion_main.cpp"
+},
+{
+  "directory": "/home/laamiy/Desktop/SPP_CMP/BUILD",
+  "command": "/usr/bin/c++  -I/home/laamiy/Desktop/SPP_CMP/include -I/home/laamiy/GENIE/Generator_DCC/src -I/home/laamiy/GENIE/Comparisons-master/src -I/home/laamiy/HEP/root_6_28/ROOT6Build/include -I/home/laamiy/HEP/Log4cpp/log4cpp/include -I/usr/include/libxml2  -o CMakeFiles/Single_pion_production_cmp.dir/src/Utils.cpp.o -c /home/laamiy/Desktop/SPP_CMP/src/Utils.cpp",
+  "file": "/home/laamiy/Desktop/SPP_CMP/src/Utils.cpp"
+}
+]
