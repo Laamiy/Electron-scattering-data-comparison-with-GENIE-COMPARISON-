@@ -8,6 +8,8 @@ set(INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(SOURCE_FILES
     ${SOURCE_DIR}/single_pion_main.cpp
     ${SOURCE_DIR}/Utils.cpp
+    ${SOURCE_DIR}/Xsec_sim.cpp
+
 )
 
 # Check required environment variables

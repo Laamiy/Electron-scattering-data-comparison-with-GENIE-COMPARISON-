@@ -55,6 +55,10 @@
 
 #define EXPECTED_SIZE 800
 
+#define pLOG(stream, priority) \
+           (*genie::Messenger::Instance())(stream) \
+               << priority << "[n] <" << __FUNCTION__ << " (" << __LINE__ << ")> : " 
+               /*<< __FILE__ << "::"*/ 
 
 
 // Single pion produciton : e + p -> e' + n + pi_+ 

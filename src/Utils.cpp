@@ -1,3 +1,4 @@
+#include "Framework/Messenger/Messenger.h"
 #include "single_pion.hpp"
 #include <sys/types.h>
 #include <vector>
@@ -6,7 +7,7 @@ Cmd_args Utils::GetCommandLineArgs(int argc, char **argv)
   {
     std::string def_spp_model = "genie::DCCSPPPXSec/NoPauliBlock"; 
     std::filesystem::path input_data_path  =""; 
-    std::cout <<"[INFO] <Utils::GetCommandLineArgs> : Parsing command line arguments\n";
+    pLOG("Utils", pINFO)<<" Parsing command line arguments";
     genie::RunOpt::Instance()->ReadFromCommandLine(argc, argv);
     genie::CmdLnArgParser parser(argc, argv);
 
@@ -22,7 +23,6 @@ Cmd_args Utils::GetCommandLineArgs(int argc, char **argv)
     }
     return {input_data_path, std::move(def_spp_model) } ; 
   }  
-
   
 void Utils:: minus_uni_2_ascii(std::string& buffer,const std::string& uni_code ,const std::string& ascii_code)
 {
@@ -42,7 +42,7 @@ std::optional<std::vector<Kinematics> > Utils :: Read_data_file(const fs::path& 
   
   if(!reader)
   {
-    std::cerr<< " [ERROR] <Utils :: Read_data_file> : couldn't open file :" << file_path.stem().c_str() << '\n';
+    pLOG("Utils", pERROR)<<" Couldn't open file :" << file_path.stem().c_str();
     return {};
   } 
   double q2{}   , W{}    , epsilon{} , theta_pi{};
@@ -74,7 +74,7 @@ std::optional<std::vector<Kinematics> > Utils :: Read_data_file(const fs::path& 
 
 void Utils::Print_dataset(const std::vector<Kinematics>& data_kinematics,const char* model_name ,const fs::path& file_path, bool save )
 {
-  std::cout << "[INFO] <main> : Dataset : \n\n";
+  pLOG("Utils", pINFO)<<" Dataset : ";
   std::vector<double> xsec , w ,unc ;
   for (auto& kine : data_kinematics)
   {
@@ -84,9 +84,9 @@ void Utils::Print_dataset(const std::vector<Kinematics>& data_kinematics,const c
     unc.push_back(kine.unc_0);
   }
 
-  std::cout << "[INFO] <main> : Dataset size : "    << data_kinematics.size() <<'\n';
-  std::cout << "[INFO] <main> : Model name   : "    << model_name     <<'\n';
-  std::cout << "[INFO] <main> : Egiyan data file path : "<< file_path <<"\n";
+  pLOG("Utils", pINFO)<<" Dataset size : "    << data_kinematics.size();
+  pLOG("Utils", pINFO)<<" Model name   : "    << model_name     ;
+  pLOG("Utils", pINFO)<<" Egiyan data file path : "<< file_path ;
 
   if (save)
   {
