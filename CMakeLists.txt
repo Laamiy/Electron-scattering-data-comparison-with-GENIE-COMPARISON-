@@ -9,7 +9,7 @@ set(SOURCE_FILES
     ${SOURCE_DIR}/single_pion_main.cpp
     ${SOURCE_DIR}/Utils.cpp
     ${SOURCE_DIR}/Xsec_sim.cpp
-
+    ${SOURCE_DIR}/spp_event.cpp
 )
 
 # Check required environment variables

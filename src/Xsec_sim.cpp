@@ -25,8 +25,10 @@ genie::XSecAlgorithmI* Utils::Init(const std::string& spp_model_name)
 	assert(spp_model.size() == 2);
 	const char* model_name = spp_model[0].c_str();
 	const char* model_conf = spp_model[1].c_str();
+	// Creating a SPP-MODEL :
 	genie::XSecAlgorithmI* gRESXSecModel = dynamic_cast< genie::XSecAlgorithmI * >(algf->AdoptAlgorithm(model_name, model_conf));
 	// Create plot canvas
+	#if 0 
 	TCanvas gC ("c", "", 20, 20, 500, 650);
 	gC.SetBorderMode(0);
 	gC.SetFillColor(0);
@@ -52,7 +54,7 @@ genie::XSecAlgorithmI* Utils::Init(const std::string& spp_model_name)
 	hdr.AddText(" ");
 	hdr.Draw();
 	gC.Update();
-
+	#endif
 	return gRESXSecModel; 
 
 }
