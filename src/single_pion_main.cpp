@@ -30,17 +30,7 @@ int main(int argc , char* argv[])
 	auto& data_kinematics  = data_kinematics_opt.value();
     // Should implement a better way to print the dataset: 
 	Utils::Print_dataset(data_kinematics, model_name.c_str(), file_path);
-	/* First way to do comparison  : *///------------------------------------------
-	genie::XSecAlgorithmI* model = Utils::Init(model_name) ;
-	/*Second way to do comparison : *///------------------------------------------
-	genie::cmp::GCPlex * plex = genie::cmp::GCPlex::Instance();
-	plex->Configure(argc,argv);
-		
-	if(!model)
-	{
-		pLOG("single_pion_main",pERROR) << "Couldn't create model : "<< model_name;
-		return -1 ;
-	}
+	
 
 	auto dsigma_var = Utils::xsec_from_spline(event_file_path,xsec_file_path,1.5f);
 	if(!dsigma_var.has_value())
@@ -52,3 +42,19 @@ int main(int argc , char* argv[])
 	Utils::Write_xsec(xsec_bins, "../res/Egyan-like_bins_with_genie_model.root");
 	return 0 ; 
 }	// main
+
+
+
+
+
+// /* First way to do comparison  : *///------------------------------------------
+	// genie::XSecAlgorithmI* model = Utils::Init(model_name) ;
+	// /*Second way to do comparison : *///------------------------------------------
+	// genie::cmp::GCPlex * plex = genie::cmp::GCPlex::Instance();
+	// plex->Configure(argc,argv);
+		
+	// if(!model)
+	// {
+	// 	pLOG("single_pion_main",pERROR) << "Couldn't create model : "<< model_name;
+	// 	return -1 ;
+	// }
