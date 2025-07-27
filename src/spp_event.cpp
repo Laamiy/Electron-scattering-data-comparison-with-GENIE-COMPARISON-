@@ -1,5 +1,7 @@
 #include "SPP_event.hpp"
+#include "Framework/GHEP/GHepParticle.h"
 #include "THnSparse.h"
+#include "TMath.h"
 #include "single_pion.hpp"
 #include <ios>
 #include <unistd.h>
@@ -76,7 +78,7 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
       if (genie::pdg::IsLepton(current_particle->Pdg()))  
       {
         leptons.push_back(current_particle);
-        // continue;  // critical fix
+        // continue;  // Need to not skip lepton and keep their kinematics.
       }
       if (current_particle->Status() != genie::kIStStableFinalState)
         continue;
@@ -152,31 +154,27 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
       double nu = q.E();                                   // energy transfer
       double W2 = (q + TLorentzVector(0, 0, 0, p_E)).M2(); // (q + p_target)^2
       double W = std::sqrt(W2);
-      //----------------------< Getting the kinematic vars from the events>
-      //------------------//
+      //----------------------< Getting the kinematic vars from the events>------------------//
 
-      //-------------------------------< Boost direction
-      //>-------------------------------//
+      //-------------------------------< Boost direction>-------------------------------//
       TLorentzVector p_target(0, 0, 0, p_E);
       TLorentzVector p_cm = q + p_target;
       TVector3 beta_cm = p_cm.BoostVector(); // Boost direction
-      //-------------------------------< Boost direction
-      //>-------------------------------//
+      //-------------------------------< Boost direction>-------------------------------//
 
-      //-----------------------------------< Final state n and pi+
-      //>------------------------//
-      auto *pion = pip[0];   // only 1 guaranteed
-      auto *neutron = ne[0]; // only 1 guaranteed
+      //-----------------------------------< Final state n and pi+>------------------------//
+      genie::GHepParticle *pion = pip[0];   // only 1 guaranteed
+      genie::GHepParticle *neutron = ne[0]; // only 1 guaranteed
 
       TLorentzVector p4_pion = *(pion->GetP4());
       TLorentzVector p4_neut = *(neutron->GetP4());
-      //-----------------------------------< Final state n and pi+
-      //>------------------------//
+      //-----------------------------------< Final state n and pi+>------------------------//
       // Boosting to CM :
       p4_pion.Boost(-beta_cm);
       p4_neut.Boost(-beta_cm);
       pLOG("Utils::spp_read_events", pNOTICE)
           << "Event # " << i << ", Electron PDG: " << ev_rec->Probe()->Pdg();
+
       pLOG("Utils::Is_proc_spp", pNOTICE) << " Bp4_pion_m2 : " << p4_pion.M2()
                                           << " Bp4_neut_m2 : " << p4_neut.M2();
       // Define coordinate system for CM angles
@@ -191,11 +189,24 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
       double theta_star = std::acos(cos_theta_star); // radians
       double phi_star   = std::atan2(pion_cm_dir.Dot(y_axis), pion_cm_dir.Dot(x_axis));
       if (phi_star < 0)
+      {
         phi_star += 2 * M_PI; // force into [0, 2pi]
-                              // 
-      double theta_deg = theta_star * 180.0 / M_PI;
-      double phi_deg   = phi_star * 180.0 / M_PI;
+      }
+      double theta_deg    = theta_star * 180.0 / M_PI;
+      double phi_deg      = phi_star * 180.0 / M_PI;
       double fill_vals[4] = {W, Q2, theta_deg, phi_deg};
+
+  // Theta e : 
+      double cos_theta_e = k_in.Vect().Unit().Dot(k_out.Vect().Unit());
+      double theta_e     = std::acos(cos_theta_e);
+      // Virtual photon polarization : 
+      double epsilon     = (1 + 2*( 1 + std::pow(nu,2)*Q2 *TMath::Tan(theta_e/2) )) ;
+      epsilon            = 1/epsilon; 
+      // Virtual flux : 
+      constexpr float alpha = (float)1/137 ; 
+      double gamma =  alpha/(2.0 * std::pow(TMath::Pi(),2) * Q2 );
+      gamma        *= (std::pow(W,2) - std::pow(p_E,2))/(2*p_E* std::pow(k_in.E(),2));
+      gamma        *= (k_out.E())/(1 - epsilon);
 
       pLOG("Utils::Is_proc_spp", pNOTICE)
           << "W = " << W << ", Q2 = " << Q2
@@ -322,7 +333,9 @@ std::optional<std::vector<CrossSectionBin>> Utils::xsec_from_spline(const fs::pa
 
                   if (N_bin > 0 && bin_volume > 0)
                   {
+
                       double d_sigma = (N_bin / N_total) * (sigma_tot / bin_volume);
+                      double d_sigma_stat_unc = (std::sqrt(N_bin) / N_total) * (sigma_tot / bin_volume);
                       sigma_sum += d_sigma * delta_Q2 * dOmega;
                       CrossSectionBin bin = 
                             {
@@ -330,7 +343,8 @@ std::optional<std::vector<CrossSectionBin>> Utils::xsec_from_spline(const fs::pa
                               0.5 * (Q2_edges[iQ2] + Q2_edges[iQ2+1]),
                               0.5 * (theta_min_deg + theta_max_deg),
                               0.5 * (phi_min_deg + phi_max_deg),
-                              d_sigma
+                              d_sigma,
+                              d_sigma_stat_unc
                             };
                       xsec_bins.push_back(bin);
                   }

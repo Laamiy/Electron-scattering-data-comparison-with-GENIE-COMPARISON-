@@ -170,6 +170,7 @@ struct CrossSectionBin
 {
   double W, Q2, theta_deg, phi_deg;
   double d_sigma_cm2_per_sr;
+  double d_sigma_stat_unc_cm2_per_sr;
 };// CrossSectionBin
 
 namespace Utils 

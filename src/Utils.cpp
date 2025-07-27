@@ -140,6 +140,8 @@ void Utils::Write_xsec(std::vector<CrossSectionBin>&  Xsec_bin_vec , const std::
   tree->Branch("theta", &bin.theta_deg);
   tree->Branch("phi", &bin.phi_deg);
   tree->Branch("dsigma", &bin.d_sigma_cm2_per_sr);
+  tree->Branch("dsigma_stat_unc", &bin.d_sigma_stat_unc_cm2_per_sr);
+
 
   for (const auto& b : Xsec_bin_vec) 
   {
