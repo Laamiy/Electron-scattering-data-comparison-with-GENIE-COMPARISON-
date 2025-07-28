@@ -20,7 +20,7 @@
 // Particles in the record
  struct Event_charac
  {
- 	THnSparseD* sparse_hist{} ; 
+ 	THnSparseD* sparse_hist{} , *h_gamma{} ; 
  	Long64_t n_entries ;
  };// Event_charac
 

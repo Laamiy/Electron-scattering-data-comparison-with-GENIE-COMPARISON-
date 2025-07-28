@@ -39,22 +39,10 @@ int main(int argc , char* argv[])
 		return -1 ; 
 	}
 	std::vector<CrossSectionBin> xsec_bins = dsigma_var.value();
-	Utils::Write_xsec(xsec_bins, "../res/Egyan-like_bins_with_genie_model.root");
+	const fs::path Egyian_bin_like_mc = "../res/Egyan-like_bins_with_genie_model.root";
+	Utils::Write_xsec(xsec_bins, Egyian_bin_like_mc.c_str());
+	Utils::Plot_comparison(Egyian_bin_like_mc, data_kinematics);
 	return 0 ; 
 }	// main
 
 
-
-
-
-// /* First way to do comparison  : *///------------------------------------------
-	// genie::XSecAlgorithmI* model = Utils::Init(model_name) ;
-	// /*Second way to do comparison : *///------------------------------------------
-	// genie::cmp::GCPlex * plex = genie::cmp::GCPlex::Instance();
-	// plex->Configure(argc,argv);
-		
-	// if(!model)
-	// {
-	// 	pLOG("single_pion_main",pERROR) << "Couldn't create model : "<< model_name;
-	// 	return -1 ;
-	// }

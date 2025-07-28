@@ -184,5 +184,7 @@ namespace Utils
                      const char *model_name, const fs::path &file_path,
                      bool save = false);
   void Write_xsec(std::vector<CrossSectionBin>&  Xsec_bin_vec , const std::string& out_file_name);
+  void Plot_comparison(const fs::path& Egiyan_like_binned_MC , const std::vector<Kinematics>& Egiyan_data);
+
 
 }; // namespace Utils

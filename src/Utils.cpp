@@ -1,6 +1,7 @@
 #include "Framework/Messenger/Messenger.h"
 #include "SPP_event.hpp"
 #include "single_pion.hpp"
+#include <filesystem>
 #include <sys/types.h>
 #include <vector>
 
@@ -153,3 +154,107 @@ void Utils::Write_xsec(std::vector<CrossSectionBin>&  Xsec_bin_vec , const std::
   outfile->Close();
 
   }
+void Utils::Plot_comparison(const fs::path& Egiyan_like_binned_MC, const std::vector<Kinematics>& Egiyan_data)
+{
+    if (!fs::exists(Egiyan_like_binned_MC)) {
+        pLOG("Utils::Plot_comparison", pERROR) << "No such file or directory: " << Egiyan_like_binned_MC;
+        return;
+    }
+
+    std::unique_ptr<TFile> Eg_file(TFile::Open(Egiyan_like_binned_MC.c_str(), "READ"));
+    TTree* tree = (TTree*)Eg_file->Get("xsec");
+    if (!tree) {
+        pLOG("Utils::Plot_comparison", pERROR) << "TTree 'xsec' not found in file";
+        return;
+    }
+
+    CrossSectionBin bin;
+    tree->SetBranchAddress("W", &bin.W);
+    tree->SetBranchAddress("Q2", &bin.Q2);
+    tree->SetBranchAddress("theta", &bin.theta_deg);
+    tree->SetBranchAddress("phi", &bin.phi_deg);
+    tree->SetBranchAddress("dsigma", &bin.d_sigma_cm2_per_sr);
+    tree->SetBranchAddress("dsigma_stat_unc", &bin.d_sigma_stat_unc_cm2_per_sr);
+
+    std::vector<double> w_genie, xsec_genie, unc_genie;
+    std::vector<double> w_data, xsec_data, unc_data;
+/*
+: q2(0.0f), w(0.0f), epsilon(0.0f), theta_pi(0.0f), sigma_0(0.0f),
+        sigma_t(0.0f), sigma_l(0.0f), unc_0(0.0f), unc_t(0.0f), unc_l(0.0f)
+*/
+Long64_t nentries = tree->GetEntries();
+for (Long64_t i = 0; i < nentries; ++i) {
+    tree->GetEntry(i);
+
+    for (const auto& eg : Egiyan_data) {
+        if (std::abs(bin.Q2 - eg.q2) < 1e-3 &&
+            std::abs(bin.theta_deg - eg.theta_pi) < 1e-2)
+        {
+            // Convert GENIE cm² to µb
+            double genie_xsec_ub = bin.d_sigma_cm2_per_sr * 1e30;
+            double genie_unc_ub  = bin.d_sigma_stat_unc_cm2_per_sr * 1e30;
+
+            w_data.push_back(eg.w);
+            xsec_data.push_back(eg.sigma_0);
+            unc_data.push_back(eg.unc_0);
+
+            w_genie.push_back(bin.W);
+            xsec_genie.push_back(genie_xsec_ub);
+            unc_genie.push_back(genie_unc_ub);
+
+            break;
+        }
+    }
+}
+
+    // Draw with TGraphErrors
+    TCanvas* c = new TCanvas("c", "GENIE vs Egiyan Comparison", 900, 600);
+    c->SetGrid();
+//------------------------------------------------------
+    // 1. Zip the vectors
+    std::vector<std::tuple<double, double, double>> genie_points;
+    for (size_t i = 0; i < w_genie.size(); ++i) {
+        genie_points.emplace_back(w_genie[i], xsec_genie[i], unc_genie[i]);
+    }
+
+    // 2. Sort by W
+    std::sort(genie_points.begin(), genie_points.end(),
+              [](const auto& a, const auto& b) { return std::get<0>(a) < std::get<0>(b); });
+
+    // 3. Unzip into sorted vectors
+    w_genie.clear();
+    xsec_genie.clear();
+    unc_genie.clear();
+    for (const auto& tup : genie_points) {
+        w_genie.push_back(std::get<0>(tup));
+        xsec_genie.push_back(std::get<1>(tup));
+        unc_genie.push_back(std::get<2>(tup));
+    }
+//------------------------------------------------------
+    TGraphErrors* g_genie = new TGraphErrors(w_genie.size(), w_genie.data(), xsec_genie.data(), nullptr, unc_genie.data());
+    g_genie->SetTitle("GENIE DCC vs Egiyan Data;W (GeV);d#sigma/d#Omega^{*} (#mub/sr)");
+    g_genie->SetMarkerStyle(21);
+    g_genie->SetMarkerColor(kBlue);
+    g_genie->SetLineColor(kBlue);
+    g_genie->SetName("GENIE");
+    g_genie->SetLineWidth(2);
+    g_genie->SetMarkerSize(1.2);
+    g_genie->SetMarkerStyle(21); // Keep circle marker
+
+
+    TGraphErrors* g_egiyan = new TGraphErrors(w_data.size(), w_data.data(), xsec_data.data(), nullptr, unc_data.data());
+    g_egiyan->SetMarkerStyle(20);
+    g_egiyan->SetMarkerColor(kRed);
+    g_egiyan->SetLineColor(kRed);
+    g_egiyan->SetName("Egiyan");
+
+    g_genie->Draw("APL");
+    // g_egiyan->Draw("P SAME");
+
+    TLegend* legend = new TLegend(0.15, 0.75, 0.4, 0.88);
+    legend->AddEntry(g_genie, "GENIE DCC", "lep");
+    legend->AddEntry(g_egiyan, "Egiyan et al. (2006)", "lep");
+    legend->Draw();
+
+    c->SaveAs("comparison_plot.pdf");
+}

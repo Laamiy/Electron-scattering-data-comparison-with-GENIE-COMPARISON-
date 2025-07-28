@@ -39,8 +39,17 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
       xmin,
       xmax
   );
-
+    THnSparseD* h_gamma =  new THnSparseD
+  (
+      "h_gamma",
+      "Gamma(GeV)",
+      ndim,
+      nbins,
+      xmin,
+      xmax
+  );
   Long64_t n_entries = event_tree->GetEntries();
+
   for (Long64_t i = 0; i < n_entries; ++i) 
   {
     event_tree->GetEntry(i);
@@ -119,8 +128,7 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
     if (pip.size() == 1 && ne.size() == 1 && pi0.empty() && pim.empty() &&
         pr.empty() && oth.size() == 1 && oth[0]->Pdg() == genie::kPdgElectron)
     {
-      //----------------------< Getting the kinematic vars from the events>
-      //------------------//
+      //----------------------< Getting the kinematic vars from the events>------------------//
       TLorentzVector k_in, k_out;
       bool found_init = false, found_final = false;
 
@@ -154,13 +162,11 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
       double nu = q.E();                                   // energy transfer
       double W2 = (q + TLorentzVector(0, 0, 0, p_E)).M2(); // (q + p_target)^2
       double W = std::sqrt(W2);
-      //----------------------< Getting the kinematic vars from the events>------------------//
 
       //-------------------------------< Boost direction>-------------------------------//
       TLorentzVector p_target(0, 0, 0, p_E);
       TLorentzVector p_cm = q + p_target;
       TVector3 beta_cm = p_cm.BoostVector(); // Boost direction
-      //-------------------------------< Boost direction>-------------------------------//
 
       //-----------------------------------< Final state n and pi+>------------------------//
       genie::GHepParticle *pion = pip[0];   // only 1 guaranteed
@@ -168,7 +174,6 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
 
       TLorentzVector p4_pion = *(pion->GetP4());
       TLorentzVector p4_neut = *(neutron->GetP4());
-      //-----------------------------------< Final state n and pi+>------------------------//
       // Boosting to CM :
       p4_pion.Boost(-beta_cm);
       p4_neut.Boost(-beta_cm);
@@ -200,11 +205,11 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
       double cos_theta_e = k_in.Vect().Unit().Dot(k_out.Vect().Unit());
       double theta_e     = std::acos(cos_theta_e);
       // Virtual photon polarization : 
-      double epsilon     = (1 + 2*( 1 + std::pow(nu,2)*Q2 *TMath::Tan(theta_e/2) )) ;
+      double epsilon     = (1 + 2*( 1 + std::pow(nu,2)*Q2 *std::tan(theta_e/2) )) ;
       epsilon            = 1/epsilon; 
       // Virtual flux : 
       constexpr float alpha = (float)1/137 ; 
-      double gamma =  alpha/(2.0 * std::pow(TMath::Pi(),2) * Q2 );
+      double gamma =  alpha/(2.0 * std::pow(M_PI,2) * Q2 );
       gamma        *= (std::pow(W,2) - std::pow(p_E,2))/(2*p_E* std::pow(k_in.E(),2));
       gamma        *= (k_out.E())/(1 - epsilon);
 
@@ -214,6 +219,8 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
           << ", phi* = " << phi_deg;
 
       h_egiyan->Fill(fill_vals);
+      h_gamma->Fill(fill_vals, gamma); // Sum of gamma weights
+
 
       // sigma(W, Q^2, theta*, phi*) = (N_bin / N_total_events) × (sigma_total / bin_width)
       for (size_t j = 0; j < ev_rec->GetEntries(); ++j)
@@ -240,7 +247,7 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
   }
 
   event_file->Close();
-  return { h_egiyan , n_entries } ; 
+  return { h_egiyan,h_gamma,n_entries } ; 
 }
 
 std::optional<std::vector<CrossSectionBin>> Utils::xsec_from_spline(const fs::path & event_file_path,const fs::path &root_file_path,double energy_GeV ) 
@@ -294,7 +301,7 @@ std::optional<std::vector<CrossSectionBin>> Utils::xsec_from_spline(const fs::pa
   double xmin[ndim] = {1.10, 0.25, 0.0, 0.0};
   double xmax[ndim] = {1.60, 0.65, 180.0, 360.0};
 
-  auto [ h_egiyan , N_total ] = spp_read_events(event_file_path);
+  auto [ h_egiyan ,h_gamma, N_total ] = spp_read_events(event_file_path);
 
   h_egiyan->SetBinEdges(0, W_edges);
   h_egiyan->SetBinEdges(1, Q2_edges);
@@ -333,10 +340,11 @@ std::optional<std::vector<CrossSectionBin>> Utils::xsec_from_spline(const fs::pa
 
                   if (N_bin > 0 && bin_volume > 0)
                   {
-
+                      double gamma_avg = h_gamma->GetBinContent(bins) / h_egiyan->GetBinContent(bins);
                       double d_sigma = (N_bin / N_total) * (sigma_tot / bin_volume);
-                      double d_sigma_stat_unc = (std::sqrt(N_bin) / N_total) * (sigma_tot / bin_volume);
+                      d_sigma   *= gamma_avg ;
                       sigma_sum += d_sigma * delta_Q2 * dOmega;
+                      double d_sigma_stat_unc = (std::sqrt(N_bin) / N_total) * (sigma_tot / bin_volume);
                       CrossSectionBin bin = 
                             {
                               0.5 * (W_edges[iW] + W_edges[iW+1]),
