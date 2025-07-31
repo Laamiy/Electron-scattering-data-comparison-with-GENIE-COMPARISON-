@@ -279,7 +279,7 @@ std::optional<std::vector<CrossSectionBin>> Utils::xsec_from_spline(const fs::pa
   
   double sigma_tot = xsec_graph->Eval(energy_GeV);
   pLOG("Utils::xsec_from_spine", pNOTICE)<< "sig(E=" << energy_GeV << " GeV) = " << sigma_tot << " cm²";
-  
+  sigma_tot = sigma_tot * 1e-38;// convert to cm²
   //Egyain-like binning : of Q2  , W , Theta and Phi :
   double Q2_edges[5] = {0.25, 0.35, 0.45, 0.55, 0.65};
   double W_edges[26];
@@ -313,6 +313,8 @@ std::optional<std::vector<CrossSectionBin>> Utils::xsec_from_spline(const fs::pa
   std::vector<double>  sigma_W(25,0.0f) ; 
   double sigma_sum = 0.0f ;
   std::vector<CrossSectionBin> xsec_bins;
+  std::cout << "sigma_tot = " << sigma_tot << std::endl;
+
   for (int iW = 0; iW < 25; ++iW) 
   {
       sigma_sum = 0.0f; // reset sigma_sum    
@@ -338,24 +340,50 @@ std::optional<std::vector<CrossSectionBin>> Utils::xsec_from_spline(const fs::pa
                   double dOmega = (phi_max_rad - phi_min_rad)* (cos(theta_min_rad) - cos(theta_max_rad));
                   double bin_volume = delta_W * delta_Q2 * dOmega;
 
-                  if (N_bin > 0 && bin_volume > 0)
+                  if (N_bin > 0) 
                   {
-                      double gamma_avg = h_gamma->GetBinContent(bins) / h_egiyan->GetBinContent(bins);
-                      double d_sigma = (N_bin / N_total) * (sigma_tot / bin_volume);
-                      d_sigma   *= gamma_avg ;
-                      sigma_sum += d_sigma * delta_Q2 * dOmega;
-                      double d_sigma_stat_unc = (std::sqrt(N_bin) / N_total) * (sigma_tot / bin_volume);
-                      CrossSectionBin bin = 
-                            {
-                              0.5 * (W_edges[iW] + W_edges[iW+1]),
-                              0.5 * (Q2_edges[iQ2] + Q2_edges[iQ2+1]),
-                              0.5 * (theta_min_deg + theta_max_deg),
-                              0.5 * (phi_min_deg + phi_max_deg),
-                              d_sigma,
-                              d_sigma_stat_unc
-                            };
-                      xsec_bins.push_back(bin);
-                  }
+                      double gamma_sum = h_gamma->GetBinContent(bins);
+                      if (gamma_sum > 0 && bin_volume > 0) 
+                      {
+                        double d_sigma = (N_bin / (gamma_sum * bin_volume)) * sigma_tot;
+                        double d_sigma_stat_unc = (std::sqrt(N_bin) / (gamma_sum * bin_volume)); //* 1e33;
+                        double d_sigma_ub = d_sigma * 1e30;  // cm² → μb
+                        double d_sigma_stat_unc_ub = d_sigma_stat_unc * 1e30;
+
+                        sigma_sum += d_sigma * delta_Q2 * dOmega;
+
+                        CrossSectionBin bin = {
+                        0.5 * (W_edges[iW] + W_edges[iW+1]),
+                        0.5 * (Q2_edges[iQ2] + Q2_edges[iQ2+1]),
+                        0.5 * (theta_min_deg + theta_max_deg),
+                        0.5 * (phi_min_deg + phi_max_deg),
+                        d_sigma_ub,//d_sigma,
+                        d_sigma_stat_unc_ub//d_sigma_stat_unc
+                        };
+                        xsec_bins.push_back(bin);
+                       std::cout << "N_bin=" << N_bin 
+                        << ", gamma_sum=" << gamma_sum 
+                        << ", bin_volume=" << bin_volume 
+                        << ", sigma_tot=" << sigma_tot 
+                        << ", d_sigma=" << d_sigma 
+                        << '\n';
+
+
+                      }
+
+                      // sigma_sum += d_sigma * delta_Q2 * dOmega;
+                      // double d_sigma_stat_unc = (std::sqrt(N_bin) / N_total) * (sigma_tot / bin_volume);
+                      // CrossSectionBin bin = 
+                      //       {
+                      //         0.5 * (W_edges[iW] + W_edges[iW+1]),
+                      //         0.5 * (Q2_edges[iQ2] + Q2_edges[iQ2+1]),
+                      //         0.5 * (theta_min_deg + theta_max_deg),
+                      //         0.5 * (phi_min_deg + phi_max_deg),
+                      //         d_sigma,
+                      //         d_sigma_stat_unc
+                      //       };
+                      // xsec_bins.push_back(bin);
+                }
         }
       }
     }
@@ -367,10 +395,10 @@ std::optional<std::vector<CrossSectionBin>> Utils::xsec_from_spline(const fs::pa
   {
     W_centers.push_back( 0.5 * ( W_edges[iW] + W_edges[iW+1] ) );
   }
-  for (const auto& bin : xsec_bins) 
-  {
-    std::cout << Form("W=%.3f Q²=%.3f θ*=%.1f° φ*=%.1f°  σ=%.3e cm²/sr\n",
-                    bin.W, bin.Q2, bin.theta_deg, bin.phi_deg, bin.d_sigma_cm2_per_sr);
-  }
+  // for (const auto& bin : xsec_bins) 
+  // {
+  //   std::cout << Form("W=%.3f Q²=%.3f θ*=%.1f° φ*=%.1f°  σ=%.3e cm²/sr\n",
+  //                   bin.W, bin.Q2, bin.theta_deg, bin.phi_deg, bin.d_sigma_cm2_per_sr);
+  // }
   return {xsec_bins};
 }

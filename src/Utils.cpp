@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <sys/types.h>
 #include <vector>
+#include "TMultiGraph.h"
 
 Cmd_args Utils::GetCommandLineArgs(int argc, char **argv)
 {
@@ -154,16 +155,18 @@ void Utils::Write_xsec(std::vector<CrossSectionBin>&  Xsec_bin_vec , const std::
   outfile->Close();
 
   }
-void Utils::Plot_comparison(const fs::path& Egiyan_like_binned_MC, const std::vector<Kinematics>& Egiyan_data)
+  void Utils::Plot_comparison(const fs::path& Egiyan_like_binned_MC, const std::vector<Kinematics>& Egiyan_data)
 {
-    if (!fs::exists(Egiyan_like_binned_MC)) {
+    if (!fs::exists(Egiyan_like_binned_MC)) 
+    {
         pLOG("Utils::Plot_comparison", pERROR) << "No such file or directory: " << Egiyan_like_binned_MC;
         return;
     }
 
     std::unique_ptr<TFile> Eg_file(TFile::Open(Egiyan_like_binned_MC.c_str(), "READ"));
     TTree* tree = (TTree*)Eg_file->Get("xsec");
-    if (!tree) {
+    if (!tree) 
+    {
         pLOG("Utils::Plot_comparison", pERROR) << "TTree 'xsec' not found in file";
         return;
     }
@@ -176,85 +179,302 @@ void Utils::Plot_comparison(const fs::path& Egiyan_like_binned_MC, const std::ve
     tree->SetBranchAddress("dsigma", &bin.d_sigma_cm2_per_sr);
     tree->SetBranchAddress("dsigma_stat_unc", &bin.d_sigma_stat_unc_cm2_per_sr);
 
-    std::vector<double> w_genie, xsec_genie, unc_genie;
-    std::vector<double> w_data, xsec_data, unc_data;
-/*
-: q2(0.0f), w(0.0f), epsilon(0.0f), theta_pi(0.0f), sigma_0(0.0f),
-        sigma_t(0.0f), sigma_l(0.0f), unc_0(0.0f), unc_t(0.0f), unc_l(0.0f)
-*/
-Long64_t nentries = tree->GetEntries();
-for (Long64_t i = 0; i < nentries; ++i) {
-    tree->GetEntry(i);
+    // Map key = (Q2, W), value = (sum_xsec, sum_unc2, W)
+    std::map<std::pair<double, double>, std::tuple<double, double, double>> genie_map;
 
-    for (const auto& eg : Egiyan_data) {
-        if (std::abs(bin.Q2 - eg.q2) < 1e-3 &&
-            std::abs(bin.theta_deg - eg.theta_pi) < 1e-2)
+    Long64_t nentries = tree->GetEntries();
+    for (Long64_t i = 0; i < nentries; ++i) 
+    {
+        tree->GetEntry(i);
+
+        // Round Q2 to match Egiyan binning precision
+        double q2_r = std::round(bin.Q2 * 1000.0) / 1000.0;
+
+        // Use W directly (do not round)
+        double W_val = bin.W;
+
+        // Key is (Q2, W)
+        auto key = std::make_pair(q2_r, W_val);
+
+        // Convert GENIE cross section from cm^2 to μb (check this factor!)
+        double genie_xsec_ub = bin.d_sigma_cm2_per_sr * 1e30;  // <-- verify this factor is correct for your units
+        double genie_unc_ub = bin.d_sigma_stat_unc_cm2_per_sr * 1e30;
+
+        auto& entry = genie_map[key];
+        std::get<0>(entry) += genie_xsec_ub;               // sum cross sections
+        std::get<1>(entry) += std::pow(genie_unc_ub, 2.0); // sum uncertainties squared
+        std::get<2>(entry) = W_val;                         // store W (redundant)
+    }
+
+    // Prepare Egiyan data grouped by Q2 for plotting
+    std::map<double, std::vector<std::tuple<double, double, double>>> q2_w_xsec_egiyan_map;
+    for (const auto& eg : Egiyan_data) 
+    {
+        double q2_r = std::round(eg.q2 * 1000.0) / 1000.0;
+        q2_w_xsec_egiyan_map[q2_r].emplace_back(eg.w, eg.sigma_0, eg.unc_0);
+    }
+
+    // Group GENIE points by Q2 for plotting
+    std::map<double, std::vector<std::tuple<double, double, double>>> q2_w_xsec_map;
+    for (const auto& [key, tup] : genie_map) 
+    {
+        auto [Q2, W] = key;
+        double xsec_sum = std::get<0>(tup);
+        double unc2_sum = std::get<1>(tup);
+        double unc = std::sqrt(unc2_sum);
+
+        // Filter invalid values just in case
+        if (!std::isfinite(Q2) || !std::isfinite(W) || !std::isfinite(xsec_sum) || !std::isfinite(unc))
         {
-            // Convert GENIE cm² to µb
-            double genie_xsec_ub = bin.d_sigma_cm2_per_sr * 1e30;
-            double genie_unc_ub  = bin.d_sigma_stat_unc_cm2_per_sr * 1e30;
+            std::cerr << "Invalid data point Q2=" << Q2 << ", W=" << W << ", xsec=" << xsec_sum << ", unc=" << unc << std::endl;
+            continue;
+        }
 
-            w_data.push_back(eg.w);
-            xsec_data.push_back(eg.sigma_0);
-            unc_data.push_back(eg.unc_0);
+        q2_w_xsec_map[Q2].emplace_back(W, xsec_sum, unc);
+    }
 
-            w_genie.push_back(bin.W);
-            xsec_genie.push_back(genie_xsec_ub);
-            unc_genie.push_back(genie_unc_ub);
-
-            break;
+    // Debug print of GENIE data points
+    std::cout << "GENIE data points (Q2, W, xsec, unc):\n";
+    for (const auto& [Q2, vec] : q2_w_xsec_map) 
+    {
+        for (const auto& [W, xsec, unc] : vec) 
+        {
+            std::cout << "Q2=" << Q2 << ", W=" << W << ", xsec=" << xsec << ", unc=" << unc << std::endl;
         }
     }
-}
 
-    // Draw with TGraphErrors
-    TCanvas* c = new TCanvas("c", "GENIE vs Egiyan Comparison", 900, 600);
+    // Canvas for combined plot
+    TCanvas* c = new TCanvas("c", "GENIE vs Egiyan Comparison", 1000, 700);
     c->SetGrid();
-//------------------------------------------------------
-    // 1. Zip the vectors
-    std::vector<std::tuple<double, double, double>> genie_points;
-    for (size_t i = 0; i < w_genie.size(); ++i) {
-        genie_points.emplace_back(w_genie[i], xsec_genie[i], unc_genie[i]);
+
+    TMultiGraph* mg = new TMultiGraph();
+    std::vector<int> colors = {kRed + 1, kBlue + 1, kGreen + 2, kMagenta + 1, kOrange + 7, kCyan + 2};
+    int color_index = 0;
+
+    // Plot GENIE (as lines) grouped by Q2
+    for (const auto& [Q2, vec] : q2_w_xsec_map) 
+    {
+        std::vector<double> w_vals, xsec_vals, unc_vals;
+        for (const auto& [W, xsec, unc] : vec) 
+        {
+            w_vals.push_back(W);
+            xsec_vals.push_back(xsec);
+            unc_vals.push_back(unc);
+        }
+
+        // Plot GENIE as lines (no error bars)
+        TGraph* g_genie = new TGraph(w_vals.size(), w_vals.data(), xsec_vals.data());
+        g_genie->SetLineColor(colors[color_index % colors.size()]);
+        g_genie->SetLineWidth(2);
+        g_genie->SetTitle(Form("GENIE Q^{2} = %.3f", Q2));
+        mg->Add(g_genie, "L");
+
+        ++color_index;
     }
 
-    // 2. Sort by W
-    std::sort(genie_points.begin(), genie_points.end(),
-              [](const auto& a, const auto& b) { return std::get<0>(a) < std::get<0>(b); });
-
-    // 3. Unzip into sorted vectors
-    w_genie.clear();
-    xsec_genie.clear();
-    unc_genie.clear();
-    for (const auto& tup : genie_points) {
-        w_genie.push_back(std::get<0>(tup));
-        xsec_genie.push_back(std::get<1>(tup));
-        unc_genie.push_back(std::get<2>(tup));
+    // Prepare Egiyan data arrays (all Q2 combined) for overlay plot as points with error bars
+    std::vector<double> w_data_all, xsec_data_all, unc_data_all;
+    for (const auto& [Q2, vec] : q2_w_xsec_egiyan_map) 
+    {
+        for (const auto& [W, xsec, unc] : vec) 
+        {
+            w_data_all.push_back(W);
+            xsec_data_all.push_back(xsec);
+            unc_data_all.push_back(unc);
+        }
     }
-//------------------------------------------------------
-    TGraphErrors* g_genie = new TGraphErrors(w_genie.size(), w_genie.data(), xsec_genie.data(), nullptr, unc_genie.data());
-    g_genie->SetTitle("GENIE DCC vs Egiyan Data;W (GeV);d#sigma/d#Omega^{*} (#mub/sr)");
-    g_genie->SetMarkerStyle(21);
-    g_genie->SetMarkerColor(kBlue);
-    g_genie->SetLineColor(kBlue);
-    g_genie->SetName("GENIE");
-    g_genie->SetLineWidth(2);
-    g_genie->SetMarkerSize(1.2);
-    g_genie->SetMarkerStyle(21); // Keep circle marker
 
+    if (!w_data_all.empty()) 
+    {
+        TGraphErrors* g_data = new TGraphErrors(w_data_all.size(), w_data_all.data(), xsec_data_all.data(), nullptr, unc_data_all.data());
+        g_data->SetMarkerStyle(24); // open circle
+        g_data->SetMarkerColor(kBlack);
+        g_data->SetLineColor(kBlack);
+        g_data->SetTitle("Egiyan et al. data");
+        mg->Add(g_data, "P");
+    }
 
-    TGraphErrors* g_egiyan = new TGraphErrors(w_data.size(), w_data.data(), xsec_data.data(), nullptr, unc_data.data());
-    g_egiyan->SetMarkerStyle(20);
-    g_egiyan->SetMarkerColor(kRed);
-    g_egiyan->SetLineColor(kRed);
-    g_egiyan->SetName("Egiyan");
+    mg->SetTitle("GENIE Cross Sections vs W;W [GeV];d^{2}#sigma / dE'd#Omega [μb/sr]");
+    mg->Draw("A");
 
-    g_genie->Draw("APL");
-    // g_egiyan->Draw("P SAME");
+    c->BuildLegend();
+    c->Print("Plot_combined.pdf");
 
-    TLegend* legend = new TLegend(0.15, 0.75, 0.4, 0.88);
-    legend->AddEntry(g_genie, "GENIE DCC", "lep");
-    legend->AddEntry(g_egiyan, "Egiyan et al. (2006)", "lep");
-    legend->Draw();
+    // Group Egiyan and GENIE points by (Q², W)
+std::map<std::pair<double, double>, std::vector<std::tuple<double, double, double>>> egiyan_by_q2w;
+std::map<std::pair<double, double>, std::vector<std::tuple<double, double, double>>> genie_by_q2w;
 
-    c->SaveAs("comparison_plot.pdf");
+for (const auto& eg : Egiyan_data) {
+    double q2_r = std::round(eg.q2 * 1000.0) / 1000.0;
+    double w_r  = std::round(eg.w  * 100.0)  / 100.0;
+    egiyan_by_q2w[{q2_r, w_r}].emplace_back(eg.theta_pi, eg.sigma_0, eg.unc_0);
 }
+
+for (const auto& [key, tup] : genie_map) {
+    double q2 = key.first;
+    double theta = key.second;
+    double w = std::get<2>(tup); // Stored W in map
+    double xsec = std::get<0>(tup);
+    double unc  = std::sqrt(std::get<1>(tup));
+
+    genie_by_q2w[{q2, w}].emplace_back(theta, xsec, unc);
+}
+
+// Create a canvas for each (Q², W) bin
+int plot_index = 0;
+for (const auto& [q2w, data_points] : egiyan_by_q2w) {
+    auto [q2, w] = q2w;
+    plot_index++;
+    std::string cname = Form("c_theta_phi_q2_%.3f_w_%.3f", q2, w);
+    TCanvas* c = new TCanvas(cname.c_str(), cname.c_str(), 900, 700);
+    c->SetGrid();
+
+    std::vector<double> theta_data, sigma_data, unc_data;
+    for (const auto& [theta, sigma, unc] : data_points) {
+        theta_data.push_back(theta);
+        sigma_data.push_back(sigma);
+        unc_data.push_back(unc);
+    }
+
+    TGraphErrors* g_egiyan = new TGraphErrors(theta_data.size(), theta_data.data(), sigma_data.data(), nullptr, unc_data.data());
+    g_egiyan->SetMarkerStyle(20);
+    g_egiyan->SetMarkerColor(kBlack);
+    g_egiyan->SetLineColor(kBlack);
+    g_egiyan->SetTitle(Form("Egiyan: Q^{2} = %.3f GeV^{2}, W = %.2f GeV", q2, w));
+    g_egiyan->GetXaxis()->SetTitle("#theta^{*} [deg]");
+    g_egiyan->GetYaxis()->SetTitle("#sigma_{T} + #varepsilon #sigma_{L} [#mu b/sr]");
+    g_egiyan->Draw("AP");
+
+    // If GENIE prediction exists for this (Q², W), draw it as a line
+    // auto it = genie_by_q2w.find(q2w);
+    // if (it != genie_by_q2w.end()) {
+    //     std::vector<double> theta_mc, sigma_mc;
+    //     for (const auto& [theta, sigma, unc] : it->second) {
+    //         theta_mc.push_back(theta);
+    //         sigma_mc.push_back(sigma);
+    //     }
+
+    //     TGraph* g_genie = new TGraph(theta_mc.size(), theta_mc.data(), sigma_mc.data());
+    //     g_genie->SetLineColor(kBlue);
+    //     g_genie->SetLineWidth(2);
+    //     g_genie->Draw("L SAME");
+
+    //     TLegend* legend = new TLegend(0.15, 0.75, 0.5, 0.88);
+    //     legend->AddEntry(g_egiyan, "Egiyan et al.", "lep");
+    //     legend->AddEntry(g_genie, "GENIE DCC", "l");
+    //     legend->Draw();
+    // }
+    auto it = genie_by_q2w.find(q2w);
+    if (it != genie_by_q2w.end())
+    {
+        std::vector<double> theta_mc, sigma_mc;
+        for (const auto& [theta, sigma, unc] : it->second)
+        {
+            theta_mc.push_back(theta);
+            sigma_mc.push_back(sigma);
+        }
+
+    if (!theta_mc.empty())
+    {
+        TGraph* g_genie = new TGraph(theta_mc.size(), theta_mc.data(), sigma_mc.data());
+        g_genie->SetLineColor(kRed);
+        g_genie->SetLineWidth(3);
+        g_genie->Draw("PL SAME");
+
+        TLegend* legend = new TLegend(0.15, 0.75, 0.5, 0.88);
+        legend->AddEntry(g_egiyan, "Egiyan et al.", "lep");
+        legend->AddEntry(g_genie, "GENIE DCC", "l");
+        legend->Draw();
+    }
+}
+
+
+    c->SaveAs(Form("Comparison_theta_q2_%.3f_w_%.2f.pdf", q2, w));
+}
+
+#if 0 
+    // Canvas for separated subplots per Q2 bin
+    TCanvas* c1 = new TCanvas("c1", "Separated GENIE and Egiyan by Q2", 1200, 800);
+    c1->SetGrid();
+    int nPadsX = 2;
+    int nPadsY = (int)q2_w_xsec_map.size() / nPadsX + 1;
+    c1->Divide(nPadsX, nPadsY);
+
+    int pad_idx = 1;
+    for (const auto& [Q2, genie_vec] : q2_w_xsec_map) 
+    {
+        c1->cd(pad_idx);
+
+        // GENIE as line graph (no error bars)
+        std::vector<double> w_genie, xsec_genie;
+        for (const auto& [W, xsec, unc] : genie_vec) 
+        {
+            w_genie.push_back(W);
+            xsec_genie.push_back(xsec);
+        }
+        TGraph* g_genie = new TGraph(w_genie.size(), w_genie.data(), xsec_genie.data());
+        g_genie->SetLineColor(kBlue);
+        g_genie->SetLineWidth(2);
+        g_genie->SetTitle(Form("GENIE Q^{2} = %.3f", Q2));
+        g_genie->GetXaxis()->SetTitle("W [GeV]");
+        g_genie->GetYaxis()->SetTitle("Cross Section (μb/sr)");
+        g_genie->Draw("AL");
+
+        // Egiyan data with error bars
+        auto eg_it = q2_w_xsec_egiyan_map.find(Q2);
+        if (eg_it != q2_w_xsec_egiyan_map.end()) 
+        {
+            const auto& eg_vec = eg_it->second;
+            std::vector<double> w_eg, xsec_eg, unc_eg;
+            for (const auto& [W, xsec, unc] : eg_vec) 
+            {
+                w_eg.push_back(W);
+                xsec_eg.push_back(xsec);
+                unc_eg.push_back(unc);
+            }
+            TGraphErrors* g_egiyan = new TGraphErrors(w_eg.size(), w_eg.data(), xsec_eg.data(), nullptr, unc_eg.data());
+            g_egiyan->SetMarkerStyle(20);
+            g_egiyan->SetMarkerColor(kRed);
+            g_egiyan->SetLineColor(kRed);
+            g_egiyan->Draw("P SAME");
+        }
+
+        pad_idx++;
+    }
+
+    c1->BuildLegend();
+    c1->Print("Plot_separated.pdf");
+    //------------------------------------------------------- NOT NEEDED _____________
+    // === Canvas for Egiyan-only plot ===
+TCanvas* c_data = new TCanvas("c_data", "Egiyan Data Only", 800, 600);
+c_data->SetGrid();
+
+TH1D* h_dummy = new TH1D("h_dummy", "", 100, 0, 180); // Adjust theta range as needed
+h_dummy->SetMinimum(0);
+h_dummy->SetMaximum(10); // Adjust based on your data
+h_dummy->GetXaxis()->SetTitle("#theta [deg]");
+h_dummy->GetYaxis()->SetTitle("#sigma_{T} + #epsilon#sigma_{L} [#mu b/sr]");
+h_dummy->Draw("AXIS");
+
+for (const auto& eg : Egiyan_data)
+{
+    double x = eg.theta_pi;      // degrees
+    double y = eg.sigma_0;    // μb/sr
+    double err = eg.unc_0;
+
+    TGraphErrors* g = new TGraphErrors(1);
+    g->SetPoint(0, x, y);
+    g->SetPointError(0, 0, err);
+    g->SetMarkerStyle(20);
+    g->SetMarkerSize(1.2);
+    g->SetMarkerColor(kBlack);
+    g->SetLineColor(kBlack);
+    g->Draw("P SAME");
+}
+
+c_data->Print("Plot_Egiyan_only.pdf");
+
+    //-------------------------------------------------------
+#endif
+}
+
