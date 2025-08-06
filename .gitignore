@@ -34,3 +34,5 @@ progress.marks
 *.swo
 *~
 .DS_Store
+res/*
+res/

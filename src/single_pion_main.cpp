@@ -29,19 +29,21 @@ int main(int argc , char* argv[])
 	// storing the returned std::vector <Kinematics> from there:
 	auto& data_kinematics  = data_kinematics_opt.value();
     // Should implement a better way to print the dataset: 
-	Utils::Print_dataset(data_kinematics, model_name.c_str(), file_path);
+	// Utils::Print_dataset(data_kinematics, model_name.c_str(), file_path);
 	
 
-	auto dsigma_var = Utils::xsec_from_spline(event_file_path,xsec_file_path,1.5f);
+	auto dsigma_var = Utils::xsec_from_spline(event_file_path,xsec_file_path,1.52f);
 	if(!dsigma_var.has_value())
 	{
 		pLOG("single_pion_main",pERROR) << "Got an empty vector : ";
 		return -1 ; 
 	}
-	std::vector<CrossSectionBin> xsec_bins = dsigma_var.value();
+	auto [ xsec_bins ,sigma_w , w_center] = dsigma_var.value();
 	const fs::path Egyian_bin_like_mc = "../res/Egyan-like_bins_with_genie_model.root";
+
 	Utils::Write_xsec(xsec_bins, Egyian_bin_like_mc.c_str());
-	Utils::Plot_comparison(Egyian_bin_like_mc, data_kinematics);
+	Utils::Plot_comparison( Egyian_bin_like_mc , data_kinematics , sigma_w , w_center );
+	
 	return 0 ; 
 }	// main
 

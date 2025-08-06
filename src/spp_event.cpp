@@ -156,15 +156,15 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
         continue;
       }
 
-      double p_E = 0.938272;
+      const double kProtonMass_GeV = 0.938272;
       TLorentzVector q = k_in - k_out;
       double Q2 = -1.0 * q.M2();                           // GeV^2
       double nu = q.E();                                   // energy transfer
-      double W2 = (q + TLorentzVector(0, 0, 0, p_E)).M2(); // (q + p_target)^2
+      double W2 = (q + TLorentzVector(0, 0, 0, kProtonMass_GeV)).M2(); // (q + p_target)^2
       double W = std::sqrt(W2);
 
       //-------------------------------< Boost direction>-------------------------------//
-      TLorentzVector p_target(0, 0, 0, p_E);
+      TLorentzVector p_target(0, 0, 0, kProtonMass_GeV);
       TLorentzVector p_cm = q + p_target;
       TVector3 beta_cm = p_cm.BoostVector(); // Boost direction
 
@@ -183,11 +183,11 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
       pLOG("Utils::Is_proc_spp", pNOTICE) << " Bp4_pion_m2 : " << p4_pion.M2()
                                           << " Bp4_neut_m2 : " << p4_neut.M2();
       // Define coordinate system for CM angles
-      TVector3 z_axis = q.Vect().Unit(); // virtual photon direction
+      TVector3 z_axis = q.Vect().Unit();                   // virtual photon direction
       TVector3 y_axis = z_axis.Cross(k_in.Vect()).Unit(); // normal to scattering plane
-      TVector3 x_axis = y_axis.Cross(z_axis).Unit(); // completes right-handed system
-
-      TVector3 pion_cm_dir = p4_pion.Vect().Unit(); // direction of boosted pion
+      TVector3 x_axis = y_axis.Cross(z_axis).Unit();     // completes right-handed system
+      // direction of boosted pion : 
+      TVector3 pion_cm_dir = p4_pion.Vect().Unit(); 
 
       // Compute angles
       double cos_theta_star = pion_cm_dir.Dot(z_axis);
@@ -210,7 +210,7 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
       // Virtual flux : 
       constexpr float alpha = (float)1/137 ; 
       double gamma =  alpha/(2.0 * std::pow(M_PI,2) * Q2 );
-      gamma        *= (std::pow(W,2) - std::pow(p_E,2))/(2*p_E* std::pow(k_in.E(),2));
+      gamma        *= (std::pow(W,2) - std::pow(kProtonMass_GeV,2))/(2*kProtonMass_GeV* std::pow(k_in.E(),2));
       gamma        *= (k_out.E())/(1 - epsilon);
 
       pLOG("Utils::Is_proc_spp", pNOTICE)
@@ -231,11 +231,7 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
             << ", 4-momentum: (" << p->Px() << ", " << p->Py() << ", "
             << p->Pz() << ", " << p->E() << ")";
       }
-      // if (!oth.empty())
-      // {
-      //     pLOG("Utils::Is_proc_spp",pERROR) << "Got other particles in the
-      //     event_record"; continue;
-      // }
+     
 
       pLOG("Utils::Is_proc_spp", pNOTICE)
           << "Event has a hadronic system with " << pr.size() << " protons, "
@@ -250,7 +246,7 @@ Event_charac Utils::spp_read_events(const fs::path &filename)
   return { h_egiyan,h_gamma,n_entries } ; 
 }
 
-std::optional<std::vector<CrossSectionBin>> Utils::xsec_from_spline(const fs::path & event_file_path,const fs::path &root_file_path,double energy_GeV ) 
+  std::optional< xsec_n_w > Utils::xsec_from_spline(const fs::path & event_file_path,const fs::path &root_file_path,double energy_GeV ) 
 {
   TFile *xsec_file = TFile::Open(root_file_path.c_str());
   if (!xsec_file || xsec_file->IsZombie())
@@ -268,18 +264,18 @@ std::optional<std::vector<CrossSectionBin>> Utils::xsec_from_spline(const fs::pa
     return {};
   }
 
+
   TGraph *xsec_graph = (TGraph *)xsec_dir->Get("tot_em");
   if (!xsec_graph)
   {
     pLOG("xsec_from_spline", pERROR) << "No TGraph named tot_em in e-_H1\n";
     return {};
   }
-
   // Interpolate at a given energy : in this case around 1.5 GeV
   
   double sigma_tot = xsec_graph->Eval(energy_GeV);
-  pLOG("Utils::xsec_from_spine", pNOTICE)<< "sig(E=" << energy_GeV << " GeV) = " << sigma_tot << " cm²";
-  sigma_tot = sigma_tot * 1e-38;// convert to cm²
+  sigma_tot = (sigma_tot * 1e30 * 1e-38); 
+
   //Egyain-like binning : of Q2  , W , Theta and Phi :
   double Q2_edges[5] = {0.25, 0.35, 0.45, 0.55, 0.65};
   double W_edges[26];
@@ -287,7 +283,7 @@ std::optional<std::vector<CrossSectionBin>> Utils::xsec_from_spline(const fs::pa
   double phi_edges_deg[13];
 
   for (int i = 0; i <= 25; ++i) 
-  {
+  { 
       W_edges[i] = 1.10 + 0.02 * i;
   }
   for (int i = 0; i <= 12; ++i)
@@ -302,92 +298,82 @@ std::optional<std::vector<CrossSectionBin>> Utils::xsec_from_spline(const fs::pa
   double xmax[ndim] = {1.60, 0.65, 180.0, 360.0};
 
   auto [ h_egiyan ,h_gamma, N_total ] = spp_read_events(event_file_path);
+  std::cout << "\n sig(E="    << energy_GeV << " GeV) = " << sigma_tot  << " ub\n";
+  std::cout << "Evaluating xsec at E = "    << energy_GeV << "GeV\n";
+  std::cout << "Graph min = " << xsec_graph->GetX()[0] << ", max = " << xsec_graph->GetX()[xsec_graph->GetN() - 1] << '\n';
+  xsec_dir->ls();
 
   h_egiyan->SetBinEdges(0, W_edges);
   h_egiyan->SetBinEdges(1, Q2_edges);
   h_egiyan->SetBinEdges(2, theta_edges_deg);
   h_egiyan->SetBinEdges(3, phi_edges_deg);
-  double delta_W  = 0.02;      // GeV
-  double delta_Q2 = 0.10;     // GeV²
-  // double sigma_tot = 1e-30;   // total cross section in cm^2 from spline
-  std::vector<double>  sigma_W(25,0.0f) ; 
+  double delta_W   = 0.02;      // GeV
+  double delta_Q2  = 0.10;     // GeV^2
   double sigma_sum = 0.0f ;
+  std::vector<double>  sigma_W(25,0.0f) ; 
   std::vector<CrossSectionBin> xsec_bins;
-  std::cout << "sigma_tot = " << sigma_tot << std::endl;
 
   for (int iW = 0; iW < 25; ++iW) 
   {
-      sigma_sum = 0.0f; // reset sigma_sum    
-      for (int iQ2 = 0; iQ2 < 4; ++iQ2) 
-      {
-          for (int i_theta = 0; i_theta < 12; ++i_theta) 
-          {
-              for (int i_phi = 0; i_phi < 12; ++i_phi) 
-              {
-                  int bins[4]  = { iW , iQ2 , i_theta , i_phi };
-                  double N_bin = h_egiyan->GetBinContent(bins);
-                  // Solid angle in steradians
-                  double theta_min_deg = theta_edges_deg[i_theta];
-                  double theta_max_deg = theta_edges_deg[i_theta+1];
-                  double phi_min_deg   = phi_edges_deg[i_phi];
-                  double phi_max_deg   = phi_edges_deg[i_phi+1];
+    sigma_sum = 0.0f;   
+    for (int iQ2 = 0; iQ2 < 4; ++iQ2) 
+    {
+        for (int i_theta = 0; i_theta < 12; ++i_theta) 
+        {
+            for (int i_phi = 0; i_phi < 12; ++i_phi) 
+            {
+                int bins[4]  = { iW , iQ2 , i_theta , i_phi };
+                double N_bin = h_egiyan->GetBinContent(bins);
+                // Solid angle in steradians
+                double theta_min_deg = theta_edges_deg[i_theta];
+                double theta_max_deg = theta_edges_deg[i_theta+1];
+                double phi_min_deg   = phi_edges_deg[i_phi];
+                double phi_max_deg   = phi_edges_deg[i_phi+1];
 
-                  double theta_min_rad = theta_min_deg * TMath::DegToRad();
-                  double theta_max_rad = theta_max_deg * TMath::DegToRad();
-                  double phi_min_rad   = phi_min_deg * TMath::DegToRad();
-                  double phi_max_rad   = phi_max_deg * TMath::DegToRad();
+                double theta_min_rad = theta_min_deg * TMath::DegToRad();
+                double theta_max_rad = theta_max_deg * TMath::DegToRad();
+                double phi_min_rad   = phi_min_deg * TMath::DegToRad();
+                double phi_max_rad   = phi_max_deg * TMath::DegToRad();
 
-                  double dOmega = (phi_max_rad - phi_min_rad)* (cos(theta_min_rad) - cos(theta_max_rad));
-                  double bin_volume = delta_W * delta_Q2 * dOmega;
+                double dOmega = (phi_max_rad - phi_min_rad)* (cos(theta_min_rad) - cos(theta_max_rad));
+                double bin_volume = delta_W * delta_Q2 * dOmega;
 
-                  if (N_bin > 0) 
-                  {
-                      double gamma_sum = h_gamma->GetBinContent(bins);
-                      if (gamma_sum > 0 && bin_volume > 0) 
+                if (N_bin > 0) 
+                {
+                    double gamma_sum = h_gamma->GetBinContent(bins);
+                    if (gamma_sum > 0 && bin_volume > 0) 
+                    {
+                      double d_sigma_ub = (N_bin / (gamma_sum * bin_volume)) *sigma_tot;
+                      double d_sigma_stat_unc = (std::sqrt(N_bin) / (gamma_sum * bin_volume)); 
+                      // double d_sigma_ub = d_sigma ;                     //μb
+                      double d_sigma_stat_unc_ub = d_sigma_stat_unc ;     //μb;
+
+                      sigma_sum += d_sigma_ub * delta_Q2 * dOmega;
+
+                      CrossSectionBin bin = 
                       {
-                        double d_sigma = (N_bin / (gamma_sum * bin_volume)) * sigma_tot;
-                        double d_sigma_stat_unc = (std::sqrt(N_bin) / (gamma_sum * bin_volume)); //* 1e33;
-                        double d_sigma_ub = d_sigma * 1e30;  // cm² → μb
-                        double d_sigma_stat_unc_ub = d_sigma_stat_unc * 1e30;
+                          0.5 * (W_edges[iW] + W_edges[iW+1]),
+                          0.5 * (Q2_edges[iQ2] + Q2_edges[iQ2+1]),
+                          0.5 * (theta_min_deg + theta_max_deg),
+                          0.5 * (phi_min_deg + phi_max_deg),
+                          d_sigma_ub,                         //d_sigma,
+                          d_sigma_stat_unc_ub                //d_sigma_stat_unc
+                      };
 
-                        sigma_sum += d_sigma * delta_Q2 * dOmega;
+                      xsec_bins.push_back(bin);
+                      std::cout << "N_bin=" << N_bin 
+                      << ", gamma_sum=" << gamma_sum 
+                      << ", bin_volume=" << bin_volume 
+                      << ", sigma_tot=" << sigma_tot 
+                      << ", d_sigma=" << d_sigma_ub 
+                      << '\n';
 
-                        CrossSectionBin bin = {
-                        0.5 * (W_edges[iW] + W_edges[iW+1]),
-                        0.5 * (Q2_edges[iQ2] + Q2_edges[iQ2+1]),
-                        0.5 * (theta_min_deg + theta_max_deg),
-                        0.5 * (phi_min_deg + phi_max_deg),
-                        d_sigma_ub,//d_sigma,
-                        d_sigma_stat_unc_ub//d_sigma_stat_unc
-                        };
-                        xsec_bins.push_back(bin);
-                       std::cout << "N_bin=" << N_bin 
-                        << ", gamma_sum=" << gamma_sum 
-                        << ", bin_volume=" << bin_volume 
-                        << ", sigma_tot=" << sigma_tot 
-                        << ", d_sigma=" << d_sigma 
-                        << '\n';
-
-
-                      }
-
-                      // sigma_sum += d_sigma * delta_Q2 * dOmega;
-                      // double d_sigma_stat_unc = (std::sqrt(N_bin) / N_total) * (sigma_tot / bin_volume);
-                      // CrossSectionBin bin = 
-                      //       {
-                      //         0.5 * (W_edges[iW] + W_edges[iW+1]),
-                      //         0.5 * (Q2_edges[iQ2] + Q2_edges[iQ2+1]),
-                      //         0.5 * (theta_min_deg + theta_max_deg),
-                      //         0.5 * (phi_min_deg + phi_max_deg),
-                      //         d_sigma,
-                      //         d_sigma_stat_unc
-                      //       };
-                      // xsec_bins.push_back(bin);
-                }
+                  }
+              }
+          }
         }
       }
-    }
-      sigma_W[iW] = sigma_sum;
+    sigma_W[iW] = sigma_sum;
   }
 
   std::vector<double> W_centers;
@@ -395,10 +381,5 @@ std::optional<std::vector<CrossSectionBin>> Utils::xsec_from_spline(const fs::pa
   {
     W_centers.push_back( 0.5 * ( W_edges[iW] + W_edges[iW+1] ) );
   }
-  // for (const auto& bin : xsec_bins) 
-  // {
-  //   std::cout << Form("W=%.3f Q²=%.3f θ*=%.1f° φ*=%.1f°  σ=%.3e cm²/sr\n",
-  //                   bin.W, bin.Q2, bin.theta_deg, bin.phi_deg, bin.d_sigma_cm2_per_sr);
-  // }
-  return {xsec_bins};
+  return {{ xsec_bins, sigma_W, W_centers }};
 }

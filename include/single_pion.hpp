@@ -101,8 +101,88 @@ public:
       unc_l;
 }; // Kinematics
 
+
+struct g_map_val 
+{
+    public : 
+      g_map_val() : W(0.0),sum_xsec(0.0),sum_unc2(0.0)
+      {}
+      g_map_val(double  w, double s_xsec , double unc ) :  W(w) , sum_xsec(s_xsec) , sum_unc2(unc) 
+      {}
+    public : 
+      double   W{} , sum_xsec{} ,sum_unc2{}; 
+
+};// g_map_val 
+
+
+struct g_map_val_byq2w 
+{
+    public : 
+      g_map_val_byq2w() : Theta(0.0),Xsec(0.0),Unc(0.0)
+      {}
+      g_map_val_byq2w(double  theta, double xsec , double unc ) :  Theta(theta) , Xsec(xsec) , Unc(unc) 
+      {}
+    public : 
+      double   Theta{} , Xsec{} ,Unc{}; 
+
+};
+
+struct Q2WThetaBin 
+{
+    int q2_bin;
+    int w_bin;
+    int theta_bin;
+    bool operator<(const Q2WThetaBin& o) const
+    {
+        return std::tie(q2_bin, w_bin, theta_bin) < std::tie(o.q2_bin, o.w_bin, o.theta_bin);
+    }
+};
+
+ struct Q2WBin 
+ {
+    int q2_bin;
+    int w_bin;
+
+    bool operator<(const Q2WBin& other) const 
+    {
+        if (q2_bin != other.q2_bin) return q2_bin < other.q2_bin;
+        return w_bin < other.w_bin;
+    }
+};// Q2WBin
+
+struct Cmd_args 
+{
+  std::filesystem::path data_file_path , event_file_path , xsec_file_path;
+  std::string spp_model_name;
+}; // Cmd_args
+
+struct CrossSectionBin 
+{
+  double W, Q2, theta_deg, phi_deg;
+  double d_sigma_ub_per_sr;
+  double d_sigma_stat_unc_ub_per_sr;
+};// CrossSectionBin
+
+namespace Utils 
+{
+  namespace fs = std::filesystem;
+  Cmd_args GetCommandLineArgs(int argc, char **argv);
+  void minus_uni_2_ascii(std::string &buffer, const std::string &uni_code,const std::string &ascii_code);
+  std::optional<std::vector<Kinematics>>
+  Read_data_file(const fs::path &file_path);
+  void Print_dataset(const std::vector<Kinematics> &data_kinematics,
+                     const char *model_name, const fs::path &file_path,
+                     bool save = false);
+  void Write_xsec(std::vector<CrossSectionBin>&  Xsec_bin_vec , const std::string& out_file_name);
+  void Plot_comparison(const fs::path& Egiyan_like_binned_MC , const std::vector<Kinematics>& Egiyan_data ,
+                       std::vector<double>& sigma_w , const std::vector<double>& w_center);
+
+
+}; // namespace Utils
+
+
 // Utility class to hold info on plotted datasets
-// Needs to be signleton -like .
+// Not used yet : ------------------------------------------------------------------------------------
 class Spp_dataset_description 
 {
   public:
@@ -159,32 +239,4 @@ class Spp_dataset_description
     Kinematics m_kine;
 
 }; // class Spp_dataset_description
-
-struct Cmd_args 
-{
-  std::filesystem::path data_file_path , event_file_path , xsec_file_path;
-  std::string spp_model_name;
-}; // Cmd_args
-
-struct CrossSectionBin 
-{
-  double W, Q2, theta_deg, phi_deg;
-  double d_sigma_cm2_per_sr;
-  double d_sigma_stat_unc_cm2_per_sr;
-};// CrossSectionBin
-
-namespace Utils 
-{
-  namespace fs = std::filesystem;
-  Cmd_args GetCommandLineArgs(int argc, char **argv);
-  void minus_uni_2_ascii(std::string &buffer, const std::string &uni_code,const std::string &ascii_code);
-  std::optional<std::vector<Kinematics>>
-  Read_data_file(const fs::path &file_path);
-  void Print_dataset(const std::vector<Kinematics> &data_kinematics,
-                     const char *model_name, const fs::path &file_path,
-                     bool save = false);
-  void Write_xsec(std::vector<CrossSectionBin>&  Xsec_bin_vec , const std::string& out_file_name);
-  void Plot_comparison(const fs::path& Egiyan_like_binned_MC , const std::vector<Kinematics>& Egiyan_data);
-
-
-}; // namespace Utils
+// Not used yet : ------------------------------------------------------------------------------------
